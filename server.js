@@ -6,9 +6,10 @@ var mongoose    = require('mongoose');
 var passport	  = require('passport');
 var config      = require('./config/database'); // get db config file
 var User        = require('./app/models/user'); // get the mongoose model
+var Mebmers     = require('./app/models/memberlist');
 var port        = process.env.PORT || 8080;
 var jwt         = require('jwt-simple');
-
+var Members     = require('./app/models/memberlist');
 // get our request parameters
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
@@ -32,6 +33,58 @@ require('./config/passport')(passport);
 
 // bundle our routes
 var apiRoutes = express.Router();
+
+// create a new user account (POST http://localhost:8080/api/signup)
+apiRoutes.post('/members', function(req, res) {
+  if (!req.body.name || !req.body.phone_no) {
+    res.json({success: false, msg: 'Please provide complete details.'});
+  } else {
+    console.log(req);
+    var newUser = new Members({
+      name: req.body.name,
+      father_name: req.body.father_name,
+      address: req.body.address,
+      phone_no: req.body.phone_no,
+      plan: req.body.plan
+    });
+    // save the user
+    newUser.save(function(err) {
+      if (err) {
+        return res.json({success: false, msg: 'Username already exists.', error: err});
+      }
+      res.json({success: true, msg: 'Successful created new user.'});
+    });
+  }
+});
+
+// create api to retrieve list of users
+apiRoutes.get('/members', function(req, res) {
+    Mebmers.find({},function(err,result){
+      res.json({alluserlist: 'alluserlist', list: result});
+    });
+});
+
+
+// route to a restricted info (GET http://localhost:8080/api/memberinfo)
+apiRoutes.get('/memberinfo', passport.authenticate('jwt', { session: false}), function(req, res) {
+  var token = getToken(req.headers);
+  if (token) {
+    var decoded = jwt.decode(token, config.secret);
+    User.findOne({
+      name: decoded.name
+    }, function(err, user) {
+        if (err) throw err;
+
+        if (!user) {
+          return res.status(403).send({success: false, msg: 'Authentication failed. User not found.'});
+        } else {
+          res.json({success: true, msg: 'Welcome in the member area ' + user.name + '!'});
+        }
+    });
+  } else {
+    return res.status(403).send({success: false, msg: 'No token provided.'});
+  }
+});
 
 // create a new user account (POST http://localhost:8080/api/signup)
 apiRoutes.post('/signup', function(req, res) {
@@ -79,26 +132,7 @@ apiRoutes.post('/authenticate', function(req, res) {
 // connect the api routes under /api/*
 app.use('/api', apiRoutes);
 
-// route to a restricted info (GET http://localhost:8080/api/memberinfo)
-apiRoutes.get('/memberinfo', passport.authenticate('jwt', { session: false}), function(req, res) {
-  var token = getToken(req.headers);
-  if (token) {
-    var decoded = jwt.decode(token, config.secret);
-    User.findOne({
-      name: decoded.name
-    }, function(err, user) {
-        if (err) throw err;
-
-        if (!user) {
-          return res.status(403).send({success: false, msg: 'Authentication failed. User not found.'});
-        } else {
-          res.json({success: true, msg: 'Welcome in the member area ' + user.name + '!'});
-        }
-    });
-  } else {
-    return res.status(403).send({success: false, msg: 'No token provided.'});
-  }
-});
+// route to know add new member
 
 getToken = function (headers) {
   if (headers && headers.authorization) {
